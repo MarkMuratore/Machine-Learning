@@ -1,0 +1,88 @@
+---
+output: html_document
+---
+
+# Predicting How Well Excercise was Performed
+  -----------------------------------------
+
+## Introduction
+   ------------
+
+This human activity recognition research has traditionally focused on discriminating between different activities, i.e. to predict "which" activity was performed at a specific point in time. The approach we propose for the Weight Lifting Exercises dataset is to investigate "how (well)" an activity was performed by the wearer. The "how (well)" investigation has only received little attention so far, even though it potentially provides useful information for a large variety of applications,such as sports training.
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Read more: (http://groupware.les.inf.puc-rio.br/har).
+
+
+## Data Cleaning and Partitioning
+   ----
+   
+The data for this project comes from http://groupware.les.inf.puc-rio.br/har and is part of the Human Activity Recognition studies. Two data set were available a training set and a test set for which 20 individuals without any classification for the class of exercise was available.
+
+First the training set was cleaned up to remove NA variables and then removed the first seven columns of extraneous information.
+
+```{r}
+pmlTrain<-read.csv("pml-training.csv", header=T, na.strings=c("NA", "#DIV/0!"))
+pmlTest<-read.csv("pml-testing.csv", header=T, na.string=c("NA", "#DIV/0!"))
+pmlTrain<-pmlTrain[, apply(pmlTrain, 2, function(x) !any(is.na(x)))] 
+pmlTrain<-pmlTrain[,-c(1:7)]
+```
+After cleaning, the Training set consists of 19622 observations and 53 variables.
+Next the Training set was partitioned into training and testing sets for analysis using the caret package.
+```{r}
+library(caret)
+inTrain<-createDataPartition(y=pmlTrain$classe, p=0.7,list=F)
+training<-pmlTrain[inTrain,]
+testing<-pmlTrain[-inTrain,]
+dim(training)
+dim(testing)
+```
+## Modeling with Cross Validation
+   ----
+   
+This section describes our model and cross validation technique as required by the assignment. 3-fold cross validation is used along with a random forest model.
+```{r}
+set.seed(1234)
+library(randomForest)
+library(e1071)
+xval<-trainControl(method="cv",number=3,allowParallel=TRUE,verboseIter=FALSE)
+modelRF = train(classe~., data=training, method="rf",trControl=xval)
+modtree = train(classe~.,data=training,method="rpart",trControl=xval)
+predRF<-predict(modelRF, testing)
+predtree<-predict(modtree, testing)
+y<-confusionMatrix(predRF, testing$classe)
+y$table
+y$overall[1]
+z<-confusionMatrix(predtree, testing$classe)
+z$table
+z$overall[1]
+```
+
+As we can see from the above analysis, the random forest model has a much higher accuracy at 99.41%. 
+
+## Final Analysis
+   ----
+   
+We wil now predict for the pml-testing data set.
+```{r}
+pmlTest<-pmlTest[, apply(pmlTest, 2, function(x) !any(is.na(x)))] 
+pmlTest<-pmlTest[,-c(1:7)]
+predTest<-predict(modelRF, pmlTest)
+```
+The predicted classes are:
+```{r}
+predTest
+```
+Now we write the files for submission.
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(predTest)
+```
+
